@@ -1,0 +1,18 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from  sklearn.linear_model import LinearRegression
+import matplotlib.pyplot as plt
+
+dataset = pd.read_csv('studentscores.csv')
+X = dataset.iloc[:,0].values
+Y = dataset.iloc[:,1].values
+X_train, X_test, Y_train, Y_test = train_test_split(X,Y, test_size=0.2, random_state=0)
+
+# 新版的sklearn中, 要求数据大于2D, 因为数据只有一列，所以用.reshape(-1,1)或者.reshape(1,－1)处理
+model = LinearRegression().fit(X_train.reshape(-1,1), Y_train.reshape(-1,1))
+Y_pred = model.predict(X_test.reshape(-1,1))
+
+# 画散点图
+plt.scatter(X,Y, c = 'red')
+plt.plot(X, model.predict(X.reshape(-1,1)), c= 'blue')
+plt.show()
