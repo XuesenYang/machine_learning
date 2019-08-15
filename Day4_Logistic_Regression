@@ -1,0 +1,27 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+import numpy as np
+
+dataset = pd.read_csv('Social_Network_Ads.csv')
+X = dataset.iloc[:, [2,3]].values
+Y = dataset.iloc[:,4].values
+
+# 由于数据里面涉及到浮点数，所以转化一下
+X = X.astype(np.float64)
+Y = Y.astype(np.float64)
+
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=0)
+sac_model = StandardScaler()
+X_train = sac_model.fit_transform(X_train)
+X_test = sac_model.fit_transform(X_test)
+
+model = LogisticRegression(solver='liblinear').fit(X_train,Y_train)
+y_pred = model.predict(X_test)
+
+CA = accuracy_score(Y_test, y_pred)
+print('分类准确率是---->',CA)
+
+
