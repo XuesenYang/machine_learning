@@ -1,0 +1,40 @@
+# 第一步 加载库
+import numpy as np
+import pandas as pd
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
+
+# 第二步读取数据
+dataset = pd.read_csv('Data.csv')
+X = dataset.iloc[:, :-1].values
+Y = dataset.iloc[:, -1].values
+
+
+# 第三步填补缺失值
+# missing_values='NaN'时出错？
+imputer = SimpleImputer(missing_values=np.nan, strategy="mean")
+# 由于替换策略是均值，所以要求数值型数据才能替换
+X[:, 1:] = imputer.fit_transform(X[:, 1:])
+
+# 第四步标签编码
+# LabelEncoder将文本/数值, 转换成连续的数值型变量0,1,2...
+label_X = LabelEncoder()
+X[:,0] = label_X.fit_transform(X[:,0])
+
+# one-hot编码, 主要处理离散型特征, 仅对第一列编码，如果自动，则选categories='auto'
+oneH = OneHotEncoder(categorical_features = [0])
+# 同时将List转为数组.toarray()
+X = oneH.fit_transform(X).toarray()
+
+# 把类别的文本转数值
+label_y = LabelEncoder()
+Y = label_y.fit_transform(Y)
+
+# 第五步切割数据集
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=0)
+
+# 第六步特征向量标准化
+sc = StandardScaler()
+X_train = sc.fit_transform(X_train)
+X_test = sc.fit_transform(X_test)
