@@ -1,0 +1,216 @@
+"""
+进入到 Basketball Reference.com 中，在导航栏中选择Season并选择2015~2016赛季中的Summary：
+进入到 2017~2018/2018-2019 年的Summary界面后，滑动窗口找到Team Per Game Stats表格，并选择左上方的 Share & more，在其下拉菜单中选择 Get table as CSV (for Excel)
+复制在界面中生成的 csv 格式数据，并粘贴至一个文本编辑器保存为 csv 文件即可
+比赛结果在NBA Schedule and Results导出,导出后多个月并在一起
+简单的数据处理
+如果需要处理好的数据，请联系1348825332@qq.com 或者2012110128@szu.edu.com
+另:需要学习Elo Score 等级分制度
+"""
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import cross_val_score
+import math
+import random
+from sklearn.linear_model import LogisticRegression
+import csv
+
+# 参数设置
+base_elo = 1600
+team_elos = {}
+team_stats = {}
+X = []
+y = []
+folder = 'NBA_data'
+
+# 加载数据
+path = '/Users/yangxuesen/PycharmProjects/untitled2/mechine_learning/NBA_data/'
+M2017_2018 =  pd.read_csv(path + '2017_2018M.csv')
+O2017_2018 =  pd.read_csv(path + '2017_2018O.csv')
+T2017_2018 =  pd.read_csv(path + '2017_2018T.csv')
+M2018_2019 =  pd.read_csv(path + '2018_2019M.csv')
+O2018_2019 =  pd.read_csv(path + '2018_2019O.csv')
+T2018_2019 =  pd.read_csv(path + '2018_2019T.csv')
+R2017_2018 =  pd.read_csv(path + '2017_2018result.csv')
+R2018_2019 =  pd.read_csv(path + '2018_2019result.csv')
+
+# # 删除最后一列的末尾异常字符
+# def del_last(input_data):
+#     data = input_data.iloc[:, -1]
+#     print(data)
+#     output = input_data
+#     for idex, row in data.iteritems():
+#         if row[-1] == '\\\\' or row[-1] == '}':
+#             data[idex] = row[:-1]
+#         elif row[-2:] == '\\':
+#             data[idex] = row[:-2]
+#         else:
+#             data[idex] = row
+#     output.iloc[:, -1] = data
+#     return output
+
+
+# 数据删除, 合并
+def initialize_data(M_data, O_data, T_data):
+    new_M = M_data.drop(['Rk', 'Arena'],axis=1)
+    new_O = O_data.drop(['Rk', 'G', 'MP'],axis=1)
+    new_T = T_data.drop(['Rk', 'G', 'MP'],axis=1)
+
+    # 拼接dataframe, how--left 左连接， 左侧取全部，右侧取部分”  on用于连接的列名（主键），必须同时存在于左右两个DataFrame
+    team = pd.merge(new_M, new_O, how='left', on='Team')
+    team = pd.merge(team, new_T, how='left', on='Team')
+    # 处理球队名字最后一位的*符号
+    team_name = team['Team']
+    for idex, row in team_name.iteritems():
+        if row[-1] == '*':
+            team_name[idex] = row[:-1]
+        else:
+            team_name[idex] = row
+    team['Team'] = team_name
+    return team.set_index('Team', inplace=False, drop= True) # 返回的dataframe把第一列当成index
+
+# 赋予初始等级分数
+def get_elo(team):
+    try:
+        return team_elos[team]
+    except:
+        team_elos[team] = base_elo
+        return team_elos[team]
+
+# 计算等级分数, E=1/{1+10^[(A-B)/400]}, 修改K值是考虑减少原始分影响
+def calc_elo(win_team, lose_team):
+    winner_rank = get_elo(win_team)
+    loser_rank = get_elo(lose_team)
+    rank_diff = winner_rank - loser_rank
+    exp = (rank_diff * -1) / 400
+
+    odds = 1/(1+math.pow(10,exp))
+
+    # 根据rank级别修改K值
+    if winner_rank < 2100:
+        k = 32
+    elif winner_rank >= 2100 and winner_rank < 2400:
+        k = 24
+    else:
+        k = 16
+
+    # 更新 rank 数值
+    new_winner_rank = round(winner_rank + (k * (1 - odds)))
+    new_loser_rank = round(loser_rank + (k * (0 - odds)))
+    return new_winner_rank, new_loser_rank
+
+def result_preprocessing(old_result):
+    leng = old_result.shape[0]
+    new_result = pd.DataFrame(np.random.randn(leng,3), columns=['WTeam', 'LTeam', 'WLoc'])
+    for index, row in old_result.iterrows():
+        if row[3] > row[5]:
+            new_result.iloc[index, 0] = row[2]
+            new_result.iloc[index, 1] = row[4]
+            new_result.iloc[index, 2] = 'V'
+        else:
+            new_result.iloc[index, 0] = row[4]
+            new_result.iloc[index, 1] = row[2]
+            new_result.iloc[index, 2] = 'H'
+    return new_result
+
+
+def  build_dataSet(all_data):
+    X = []
+    skip = 0
+    for index, row in all_data.iterrows():
+
+        Wteam = row['WTeam']
+        Lteam = row['LTeam']
+
+        #获取最初的elo或是每个队伍最初的elo值
+        team1_elo = get_elo(Wteam)
+        team2_elo = get_elo(Lteam)
+
+        # 给主场比赛的队伍加上100的elo值
+        if row['WLoc'] == 'H':
+            team1_elo += 100
+        else:
+            team2_elo += 100
+
+        # 把elo当为评价每个队伍的第一个特征值
+        team1_features = [team1_elo]
+        team2_features = [team2_elo]
+
+        # 添加我们从basketball reference.com获得的每个队伍的统计信息
+        for key, value in team_stats.loc[Wteam].iteritems():
+            team1_features.append(value)
+        for key, value in team_stats.loc[Lteam].iteritems():
+            team2_features.append(value)
+
+        # 将两支队伍的特征值随机的分配在每场比赛数据的左右两侧
+        # 并将对应的0/1赋给y值
+        if random.random() > 0.5:
+            X.append(team1_features + team2_features)
+            y.append(0)
+        else:
+            X.append(team2_features + team1_features)
+            y.append(1)
+
+        if skip == 0:
+            print('X',X)
+            skip = 1
+
+        # 根据这场比赛的数据更新队伍的elo值
+        new_winner_rank, new_loser_rank = calc_elo(Wteam, Lteam)
+        team_elos[Wteam] = new_winner_rank
+        team_elos[Lteam] = new_loser_rank
+
+    return np.nan_to_num(X), y
+
+if __name__ == '__main__':
+    team_stats = initialize_data(M2017_2018, O2017_2018, T2017_2018)
+    resulrt_1718 = result_preprocessing(R2017_2018)
+    X, y = build_dataSet(resulrt_1718)
+
+    # 训练逻辑回归
+    model = LogisticRegression()
+    model.fit(X, y)
+    print(cross_val_score(model, X, y, cv=10, scoring='accuracy', n_jobs=-1).mean())
+
+
+def predict_winner(team_1, team_2, model):
+    features = []
+
+    # team 1，客场队伍
+    features.append(get_elo(team_1))
+    for key, value in team_stats.loc[team_1].iteritems():
+        features.append(value)
+
+    # team 2，主场队伍
+    features.append(get_elo(team_2) + 100)
+    for key, value in team_stats.loc[team_2].iteritems():
+        features.append(value)
+
+    features = np.nan_to_num(features)
+    return model.predict_proba([features])
+
+# 利用训练好的model在18-19年的比赛中进行预测
+
+print('预测新赛季')
+result = []
+resulrt_1819 = result_preprocessing(R2018_2019)
+for index, row in resulrt_1819.iterrows():
+    team1 = row['WTeam']
+    team2 = row['LTeam']
+    pred = predict_winner(team1, team2, model)
+    prob = pred[0][0]
+    if prob > 0.5:
+        winner = team1
+        loser = team2
+        result.append([winner, loser, prob])
+    else:
+        winner = team2
+        loser = team1
+        result.append([winner, loser, 1 - prob])
+
+with open('18_19Result.csv', 'w') as f:
+    writer = csv.writer(f)
+    writer.writerow(['win', 'lose', 'probability'])
+    writer.writerows(result)
+
+
