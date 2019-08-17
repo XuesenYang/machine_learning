@@ -1,0 +1,48 @@
+# 数据链接: http://labfile.oss.aliyuncs.com/courses/777/digits.zip
+import numpy as np
+import pandas as pd
+import os
+from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import accuracy_score
+
+
+path = '/Users/yangxuesen/PycharmProjects/untitled2/mechine_learning/digits/'
+
+# 把txt文件的数字转为一行向量
+def img2vector(filename):
+    returnvector = np.zeros((1,1024))
+    fr = open(filename)
+    for i in range(32):
+        # readline 读取文件中的一行，每次读取一行，返回字符串对象
+        linestr = fr.readline()
+        for j in range(32):
+            returnvector[0,32*i+j] = int(linestr[j])
+    return returnvector
+
+# 特征向量和分类标签提取
+def read_file(filepath):
+    pathDir = os.listdir(filepath)
+    vector = list()
+    label_list = list()
+    for filename in pathDir:
+        label = int(filename[0])
+        fullname = os.path.join(filepath,filename)
+        vector.append(img2vector(fullname)[0])
+        label_list.append(label)
+    return vector,label_list
+
+train_path = (path + 'trainingDigits/')
+train_vector, train_label = read_file(train_path)
+test_path = (path + 'testDigits')
+test_vector, test_label = read_file(test_path)
+
+# 多层感知器分类器: https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html#sklearn.neural_network.MLPClassifier
+clf = MLPClassifier(solver='lbfgs', alpha=1e-5,
+                    hidden_layer_sizes=(100,), random_state=1)
+clf.fit(train_vector,train_label)
+
+test_pred = clf.predict(train_vector)
+acc = accuracy_score(train_label,test_pred)
+print('预测准确率为---->', acc)
+
+
