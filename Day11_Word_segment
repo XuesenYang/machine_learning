@@ -1,0 +1,66 @@
+# encoding=utf-8
+# coding: utf-8
+import jieba
+import os
+import sys
+
+# 评测数据集SIGHAN - 2nd International Chinese Word Segmentation Bakeoff: http://sighan.cs.uchicago.edu/bakeoff2005/
+# 结巴分词 https://github.com/fxsjy/jieba
+"""
+精确模式，试图将句子最精确地切开，适合文本分析；jieba.cut(str, cut_all=False)
+全模式，把句子中所有的可以成词的词语都扫描出来, 速度非常快，但是不能解决歧义；jieba.cut(str, cut_all=True)
+搜索引擎模式，在精确模式的基础上，对长词再次切分，提高召回率，适合用于搜索引擎分词。jieba.lcut_for_search／jieba.cut_for_search
+"""
+def load_path(data_name):
+    # 当前脚本所在路径
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    # 数据所在路径
+    local_corpus_dir = (cur_dir + '/icwb2-data')
+    # 训练集所在路径
+    train_file_path = (local_corpus_dir + '/training/'+ data_name + '_training.utf8')
+    # 测试集所在路径
+    test_file_path = (local_corpus_dir + '/testing/'+ data_name + '_test.utf8')
+    # 分词结果所在路径
+    test_seg_res_path = (local_corpus_dir + '/testing/'+ data_name + '_test_seg.utf8')
+    # 评测准则所在路径
+    test_gold_path = (local_corpus_dir + '/gold/'+ data_name + '_test_gold.utf8')
+    train_words_gold_path = (local_corpus_dir + '/gold/'+ data_name + '_training_words.utf8')
+    # 评测代码所在路径
+    score_bin_path = (local_corpus_dir + '/scripts/score')
+    return cur_dir, local_corpus_dir, train_file_path, test_file_path, test_seg_res_path, train_words_gold_path,test_gold_path, score_bin_path
+
+def do_train_and_test(cur_dir, local_corpus_dir, train_file_path, test_file_path, test_seg_res_path, train_words_gold_path, test_gold_path, score_bin_path):
+    # 生成测试集分词结果
+    with open(test_file_path) as fopen, open(test_seg_res_path, 'w') as fwrite:
+        for line in fopen:
+            sentence = line.strip()
+            if sentence:
+                terms = jieba.cut(sentence)
+            else:
+                terms = []
+            fwrite.write(' '.join(terms) + '\n')
+
+    # 评估分数
+    cmd = 'perl %s %s %s %s > %s/score.utf8' % (score_bin_path, train_words_gold_path, test_gold_path, test_seg_res_path, cur_dir)
+    os.system(cmd)
+
+if __name__ == '__main__':
+    dataset_name = ['as','cityu','msr','pku']
+    for data_name in dataset_name:
+        cur_dir, local_corpus_dir, train_file_path, test_file_path, test_seg_res_path, train_words_gold_path, test_gold_path, score_bin_path = load_path(data_name)
+        do_train_and_test(cur_dir, local_corpus_dir, train_file_path, test_file_path, test_seg_res_path, train_words_gold_path, test_gold_path, score_bin_path)
+        cur_dir = os.path.dirname(os.path.realpath(__file__))
+        score_name = os.path.join(cur_dir + '/score.utf8')
+        split_file = os.path.splitext('score.utf8')
+        new_dic = (split_file[0] + '.txt')
+        os.rename(score_name, os.path.join(cur_dir, new_dic))
+        with open(os.path.join(cur_dir, new_dic), 'r', encoding="UTF-8", errors='ignore') as f:
+            lines = f.readlines()
+            last_line = lines[-1]
+            last_line = last_line.split()
+            reacll_vel = float(last_line[8])
+            precision_vel = float(last_line[9])
+            F_vel = float(last_line[10])
+            print('数据集%s  召回率-->%f  精确率-->%f  F值-->%f ' % (data_name, reacll_vel, precision_vel, F_vel))
+            
+# 直接运行脚本
