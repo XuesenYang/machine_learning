@@ -1,0 +1,116 @@
+import pandas as pd
+from math import *
+
+
+# 读取数据
+movies = pd.read_csv('ml-latest-small/movies.csv')
+ratings = pd.read_csv('ml-latest-small/ratings.csv')
+
+
+# 整合电影和评分数据，以电影id为整合索引
+data = pd.merge(movies, ratings, on= 'movieId')
+# print(data.head())
+data[['userId', 'rating', 'movieId', 'title']].sort_values('userId').to_csv('ml-latest-small/data.csv',index=False)
+
+# 给每个用户创建一个字典来装其评分信息
+file = open('ml-latest-small/data.csv', 'r', encoding='UTF-8') # 'r'只读
+data = {}
+for line in file.readlines():
+    line = line.strip().split(',') # strip() 方法用于移除字符串头尾指定的字符（默认为空格或换行符）或字符序列 split() 通过指定分隔符对字符串进行切片返回字符串列表
+    # 如果字典中没有某位用户，则使用用户ID来创建这位用户
+    if not line[0] in data.keys():
+        data[line[0]] = {line[3]:line[1]} # line[3]是电影名字，line[1]是评分。 {'1':{'名字': 评分...}}
+
+    # 否则直接添加以该用户ID为key字典中
+    else:
+        data[line[0]][line[3]] = line[1] # data[line[0]]是字典{'名字': 评分...}，data[line[0]][line[3]]是新的line的电影名字，line[1]是评分
+
+# 相似度计算公式1
+def Euclidean(user1, user2):
+    # 取出两位用户评论过的电影和评分
+    # 因为data是一个字典，所以data[user]直接调取user的value, 这个value也是一个字典
+    user1_data = data[user1]
+    user2_data = data[user2]
+    distance = 0
+    # 找到两位用户都评论过的电影，并计算欧式距离
+    for key in user1_data.keys():
+        if key in user2_data.keys():
+            distance += pow(float(user1_data[key]) - float(user2_data[key]), 2) # (x-y)^2 评分差距越大，相似度越低
+    return 1/(1+sqrt(distance))
+
+# 相似度计算公式2:皮尔森相关系数
+def pearson_sim(user1, user2):
+    # 取出两位用户评论过的电影和评分
+    user1_data = data[user1]
+    user2_data = data[user2]
+    distance = 0
+    common = {}
+
+    # 找到两位用户都评论过的电影
+    for key in user1_data.keys():
+        if key in user2_data.keys():
+            common[key] = 1
+    if len(common) == 0:
+        return 0  # 如果没有共同评论过的电影，则返回0
+    n = len(common)  # 共同电影数目
+    print(n, common)
+
+    ##计算评分和
+    sum1 = sum([float(user1_data[movie]) for movie in common])
+    sum2 = sum([float(user2_data[movie]) for movie in common])
+
+    ##计算评分平方和
+    sum1Sq = sum([pow(float(user1_data[movie]), 2) for movie in common])
+    sum2Sq = sum([pow(float(user2_data[movie]), 2) for movie in common])
+
+    ##计算乘积和
+    PSum = sum([float(user1_data[it]) * float(user2_data[it]) for it in common])
+
+    ##计算相关系数
+    num = PSum - (sum1 * sum2 / n)
+    den = sqrt((sum1Sq - pow(sum1, 2) / n) * (sum2Sq - pow(sum2, 2) / n))
+    if den == 0:
+        return 0
+    r = num / den
+    return r
+
+# 计算某个用户与其他用户的相似度
+def top5_similar(userID):
+    res = []
+    # 对于每个用户useID
+    # 遍历其他的用户
+    for userid in data.keys():
+        # 计算除自己以外的相似度
+        if not userid == userID:
+            similar = Euclidean(userID, userid)
+            # 用元组装相似度，因为元组的不可变性
+            # ['userid', 相似度]
+            res.append((userid,similar))
+    res.sort(key=lambda val:val[1])
+    return  res[0:4] #
+
+# 测试案例
+sample = top5_similar('1')
+print(sample)
+
+# 开始给用户B推荐电影
+def recommend(user):
+    # 相似度最高的用户A的id
+    top_sim_user = top5_similar(user)[0][0]
+    #相似度最高的用户A的观影记录
+    items = data[top_sim_user]
+    recommendation = []
+    # 筛选出客户A没看过的电影, 放到recommendation中
+    for item in items.keys():
+        if items not in data[user].keys():
+            recommendation.append((item, items[item]))
+    # 没看过的电影里面，根据B的经验评分排序
+    recommendation.sort(key=lambda val:val[1], reverse=True)
+    # 推荐10部
+    return recommendation[:10]
+
+# 测试案例
+Recommendations = recommend('1')
+print(Recommendations)
+
+
