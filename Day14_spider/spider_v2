@@ -24,6 +24,7 @@ def getUrl():
     disease_url = ['https://www.wiki8.com/Categorize/心律失常.html', 'https://www.wiki8.com/Categorize/高血压与高血压病.html',
                    'https://www.wiki8.com/Categorize/心肌病.html', 'https://www.wiki8.com/Categorize/冠心病.html','https://www.wiki8.com/Categorize/心包炎.html']
     # 一个科室对应一个index，总科室数目不清楚
+    # disease_url = ['https://www.wiki8.com/Categorize/心律失常.html']
     num_list = []
     name_set = []
     for i in disease_url:
@@ -72,7 +73,14 @@ def parse(Sublist):
         # print(c)
         headers = []
         for table in c:
-            headers.extend([table.text])
+            # a是str
+            a = table.text
+            a = a.strip('\r')
+            a = a.strip('\n')
+            b = a.strip('\t')
+            b = b.strip('\r')
+            # print(table.text)
+            headers.append(b)
         full_text.append(headers)
     return full_text
 
