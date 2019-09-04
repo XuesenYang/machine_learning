@@ -1,0 +1,100 @@
+# -*- coding: UTF-8 -*-
+from queue import Queue, Empty
+import requests
+from requests import get
+from bs4 import BeautifulSoup
+import re
+from threading import Thread
+import xlwt
+import xdrlib
+import openpyxl
+import timeit
+
+
+# 新建excel文件
+file = xlwt.Workbook()
+# 新建一个sheet
+table = file.add_sheet('info', cell_overwrite_ok=True)
+
+# 从网页获取数据
+def getUrl():
+    url_sets = []
+    qiuyi_angiocarpy_menu_url_part1 = 'http://ask.qiuyi.cn/department/'
+    qiuyi_angiocarpy_menu_url_part2 = '/index.html'
+    # 一个科室对应一个index，总科室数目不清楚
+    for i in range(1, 2):
+        page_number = str(i)
+        # 请求http服务器
+        response = get(qiuyi_angiocarpy_menu_url_part1+page_number+qiuyi_angiocarpy_menu_url_part2)
+        response.encoding = "utf-8"
+        # 输入文档，输出转换为utf-8编码
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # ul 里面是问答内容
+        text = soup.find('ul',{'class':'active'})
+        # findAll 提取问答区的具体标题
+        text = text.findAll('a',{'target':'_blank'})
+        # 获取某问答的具体内容所在网页
+        for url in text:
+            url_sets.append(url.get('href'))
+    # 无序的不重复序列
+    url_sets = set(url_sets)
+    return url_sets
+
+urllist = getUrl()
+Sublist = []
+for i in urllist:
+    Sublist.append(i)
+
+# with open('urllist.txt') as f:
+#     urllist = f.read().splitlines()
+
+#
+def parse(listUrl):
+    row = 0
+    colume = 0
+    print(listUrl)
+    for url in listUrl:
+        response = get(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        text = soup.find('div', {'class': 'ask_title'})
+        print(text)
+        catalogry = text.find('a').text
+
+        # #
+        table.write(row, colume, catalogry)
+        colume +=1
+        catalogry = ''
+        title = text.find('h1').text
+        table.write(row, colume, title)
+        title = ''
+        colume +=1
+        text = soup.find('div',{'class':'wd_cont_s'}).text
+        description = re.sub('我有更好的答案', '', text)
+        useless1 = '曾经的治疗情况和效果: \n无 想得到怎样的帮助: \n无 \n'
+        useless2 = '\n病情描述: \n'
+        description = re.sub(useless1, '', description)
+        description = re.sub(useless2, '', description)
+        table.write(row, colume, description)
+        description = ''
+        colume +=1
+        text = soup.findAll('div',{'class':'wd_box_2 bor answer'})
+        answers = []
+        for answers in text:
+            answers1 = answers.find('div',{'class':'wd_cont_s'}).text
+            useless1 = answers.find('p',{'class':'clearfix'}).text
+            useless2 = '病情分析：'
+            answer = re.sub(useless1, '', answers1)
+            answer = answer.replace("|","")
+            answer = re.sub(useless2, '', answer)
+            answers.append(answer.strip('\n'))
+            table.write(row, colume, answer)
+            colume +=1
+        answer = ''
+        row +=1
+        colume = 0
+
+
+start = timeit.default_timer()
+parse(Sublist)
+file.save('dialog.xls')
+stop = timeit.default_timer()
