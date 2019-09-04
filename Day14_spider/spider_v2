@@ -1,0 +1,85 @@
+# -*- coding: UTF-8 -*-
+from queue import Queue, Empty
+import requests
+from requests import get
+from bs4 import BeautifulSoup
+import re
+from threading import Thread
+import xlwt
+import xdrlib
+import openpyxl
+import timeit
+import pandas as pd
+
+
+# 新建excel文件
+file = xlwt.Workbook()
+# 新建一个sheet
+table = file.add_sheet('info', cell_overwrite_ok=True)
+
+# 从网页获取数据
+def getUrl():
+    url_sets = []
+    url_list = []
+    disease_url = ['https://www.wiki8.com/Categorize/心律失常.html', 'https://www.wiki8.com/Categorize/高血压与高血压病.html',
+                   'https://www.wiki8.com/Categorize/心肌病.html', 'https://www.wiki8.com/Categorize/冠心病.html','https://www.wiki8.com/Categorize/心包炎.html']
+    # 一个科室对应一个index，总科室数目不清楚
+    num_list = []
+    name_set = []
+    for i in disease_url:
+        # 请求http服务器
+        response = get(i)
+        response.encoding = "utf-8"
+        # 输入文档，输出转换为utf-8编码
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # div 里面是子病种内容
+        text = soup.find('div',{'id':'content'})
+        text = text.find('ul',{'class':"cateList"})
+        dis_name = text.findAll('li')
+        # 子病种名字集合
+        for tab in dis_name:
+            name_set.extend([tab.text])
+        number_dis = len(name_set)
+        num_list.append(number_dis)
+        # findAll 提取子病种的具体网址集合
+        text = text.findAll('a')
+        # 获取子病种的具体内容所在网页
+        url_part1 = 'https://www.wiki8.com'
+        for url in text:
+            url_sets.append(url.get('href'))
+        for url_part2 in url_sets:
+            full_url = url_part1 +url_part2
+            if full_url not in url_list:
+                url_list.append(full_url)
+
+    # 无序的不重复序列
+    # url_list = set(url_list)
+    return url_list,name_set
+
+Sublist, name = getUrl()
+
+def parse(Sublist):
+    row = 0
+    colume = 0
+    full_text = []
+    for url in Sublist:
+        response = get(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        text = soup.find('div', {'id':'main'})
+        text = text.find('div', {'id':'content'})
+        # print(text)
+        c = text.findAll('p')
+        # print(c)
+        headers = []
+        for table in c:
+            headers.extend([table.text])
+        full_text.append(headers)
+    return full_text
+
+start = timeit.default_timer()
+result = parse(Sublist)
+stop = timeit.default_timer()
+
+file= pd.DataFrame({'disease': name, 'page': Sublist,'text': result},
+                      columns=['disease', 'page', 'text'])
+file.to_csv("disease_text_data_v1.csv", encoding="utf_8_sig")
